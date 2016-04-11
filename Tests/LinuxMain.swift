@@ -1,8 +1,11 @@
 import XCTest
-@testable import Swiftontest
+
+@testable import SwiftonTestSuite
 
 XCTMain([
-    MemoryModelTests(),
-    ControllerTests(),
-    RouterTests()
+    testCase(MemoryModelTests.allTests),
+    testCase(ControllerTests.allTests),
+    testCase(RouterTests.allTests)
 ])
+
+
