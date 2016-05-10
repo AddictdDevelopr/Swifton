@@ -1,5 +1,5 @@
-import Swifton
-import Inquiline
+@testable import Swifton
+import S4
 import PathKit
 import XCTest
 
@@ -27,72 +27,70 @@ class RouterTests: XCTestCase {
         SwiftonConfig.publicDirectory = (Path(#file).parent() + "Fixtures").description
 
         TestModel.reset()
-        TestModel.create([
-            "name": "Saulius",
-            "surname": "Grigaitis"
-        ])
+        TestModel.create(["name": "Saulius", "surname": "Grigaitis"])
 
-        router = Router()
-        router.resources("testModels", TestModelsController())
-        request = Request(
-            method: "GET",
-            path: "/testModels/new",
-            headers: [("Accept", "text/html")],
-            body: ""
+        router = Router.create { route in
+            route.resources("testModels", controller: TestModelsController())
+        }
+    }
+
+    func createRequest(path: String, method: S4.Method, body: String = "") -> Request {
+        return Request(
+            method: method,
+            uri: URI(path: path),
+            headers: ["Accept": "text/html,test"],
+            body: Data(body)
         )
     }
 
     func testResourceIndexRoute() {
-        request.path = "/testModels"
-        let response = router.respond(request)
-        XCTAssertEqual(response.body, "\nSaulius\n\n\n")
+        let request = createRequest(path: "/testModels", method: .get)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.bodyString, "\nSaulius\n\n\n")
     }
 
     func testNewResourceRoute() {
-        let response = router.respond(request)
-        XCTAssertEqual(response.body, "header\n\nnew\nfooter\n\n")
+        let request = createRequest(path: "/testModels/new", method: .get)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.bodyString, "header\n\nnew\nfooter\n\n")
     }
 
     func testShowResourceRoute() {
-        request.path = "/testModels/1"
-        let response = router.respond(request)
-        XCTAssertEqual(response.body, "Saulius\n")
+        let request = createRequest(path: "/testModels/1", method: .get)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.bodyString, "Saulius\n")
     }
 
     func testEditResourceRoute() {
-        request.path = "/testModels/1/edit"
-        let response = router.respond(request)
-        XCTAssertEqual(response.body, "Grigaitis\n")
+        let request = createRequest(path: "/testModels/1/edit", method: .get)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.bodyString, "Grigaitis\n")
     }
 
     func testCreateResourcePath() {
-        request.path = "/testModels"
-        request.method = "POST"
-        let response = router.respond(request)
-        XCTAssertNil(response.body)
+        let request = createRequest(path: "testModels", method: .post)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.statusCode, 302)
+        XCTAssertEqual(response.bodyString, "")
     }
 
     func testDeleteResourcePath() {
-        request.path = "/testModels/1"
-        request.method = "POST"
-        request.body = "_method=DELETE"
-        router.respond(request)
+        let request = createRequest(path: "/testModels/1", method: .post, body: "_method=DELETE")
+        try! router.respond(to: request)
         XCTAssertEqual(TestModel.all.count, 0)
     }
 
     func testUpdateResourcePath() {
-        request.path = "/testModels/1"
-        request.method = "POST"
-        request.body = "_method=PATCH&name=James"
-        router.respond(request)
+        let request = createRequest(path: "/testModels/1", method: .post, body: "_method=PATCH&name=James")
+        try! router.respond(to: request)
         let record = TestModel.find(1)!
         XCTAssertEqual(String(record["name"]!), "James")
     }
 
     func testServeStaticFile() {
-        request.path = "/static.txt"
-        let staticFile = router.respond(request)
-        XCTAssertEqual(staticFile.body, "static\n")
+        let request = createRequest(path: "/static.txt", method: .get)
+        let staticFile = try! router.respond(to: request)
+        XCTAssertEqual(staticFile.bodyString, "static\n")
     }
 
 //    TODO: Fix
@@ -103,16 +101,14 @@ class RouterTests: XCTestCase {
 //    }
 
     func testMissingRouteError() {
-        request.path = "/nonExisting"
-        let response = router.respond(request)
-        XCTAssertEqual(response.body, "Route Not Found")
+        let request = createRequest(path: "/nonExisting", method: .get)
+        let response = try! router.respond(to: request)
+        XCTAssertEqual(response.bodyString, "Route Not Found")
     }
 
     func testUTF8PostParams() {
-        request.path = "/testModels"
-        request.method = "POST"
-        request.body = "name=Kęstutis&surname=Švitrigaila"
-        router.respond(request)
+        let request = createRequest(path: "/testModels", method: .post, body: "name=Kęstutis&surname=Švitrigaila")
+        try! router.respond(to: request)
         let record = TestModel.find(2)!
         XCTAssertEqual(String(record.attributes["name"]!), "Kęstutis")
         XCTAssertEqual(String(record.attributes["surname"]!), "Švitrigaila")

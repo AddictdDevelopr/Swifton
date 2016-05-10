@@ -1,5 +1,5 @@
-import Swifton
-import Inquiline
+@testable import Swifton
+import S4
 import PathKit
 import XCTest
 
@@ -27,64 +27,72 @@ class ControllerTests: XCTestCase {
 
         Controller.applicationController = TestApplicationController()
         TestModel.reset()
-        TestModel.create([
-            "name": "Saulius",
-            "surname": "Grigaitis"
-        ])
-        request = Request(
-            method: "GET",
-            path: "/",
-            headers: [("Accept", "text/html")],
-            body: ""
-        )
+        TestModel.create(["name": "Saulius", "surname": "Grigaitis"])
+        request = createRequest()
+
         postRequest = Request(
-            method: "POST",
-            path: "/",
-            headers: [("Accept", "text/html")],
-            body: ""
+            method: .post,
+            uri: URI(path: "/"),
+            headers: ["Accept": "text/html"]
         )
         postRequest.params = ["name": "James", "surname": "Bond"]
     }
 
+    private func createRequest(path: String = "/", method: S4.Method = .get,
+        headers: Headers = [:], body: String = "") -> Request {
+
+        var headers = headers
+        if headers["Accept"].values.isEmpty {
+            headers["Accept"] = "text/html"
+        }
+
+        return Request(
+            method: method,
+            uri: URI(path: path),
+            headers: headers,
+            body: Data(body)
+        )
+    }
+
     func testRenderHtmlCollection() {
         TestModel.create(["name": "James", "surname": "Bond"])
-        let rendered = controller["index"](request: request)
-        XCTAssertEqual(rendered.body, "\nSaulius\n\nJames\n\n\n")
+        let rendered = try! controller["index"](to: request)
+        XCTAssertEqual(rendered.bodyString, "\nSaulius\n\nJames\n\n\n")
     }
 
     func testRenderJsonCollection() {
         TestModel.create(["name": "James", "surname": "Bond"])
-        request.headers = [("Accept", "application/json")]
-        let rendered = controller["index"](request: request)
+        let request = createRequest(headers: ["Accept": "application/json"])
+        let rendered = try! controller["index"](to: request)
 
         let recordsJson: [String] = TestModel.all.map { record in
             let attributes = record.attributes.map { "\"\($0)\": \"\($1)\"" }
             return "{\(attributes.joined(separator: ", "))}"
         }
 
-        XCTAssertEqual(rendered.body, "{\"testModels\": [\(recordsJson.joined(separator: ", "))]}")
+        XCTAssertEqual(rendered.bodyString, "{\"testModels\": [\(recordsJson.joined(separator: ", "))]}")
     }
 
     func testRenderHtmlSingleModel() {
         request.params = ["id": "1"]
-        let rendered = controller["show"](request: request)
-        XCTAssertEqual(rendered.body, "Saulius\n")
+        let rendered = try! controller["show"](to: request)
+        XCTAssertEqual(rendered.bodyString, "Saulius\n")
     }
 
     func testRenderHtmlSingleModelWithUTF8() {
         TestModel.create(["name": "ąčęėį"])
         request.params = ["id": "2"]
-        let rendered = controller["show"](request: request)
-        XCTAssertEqual(rendered.body, "ąčęėį\n")
+        let rendered = try! controller["show"](to: request)
+        XCTAssertEqual(rendered.bodyString, "ąčęėį\n")
     }
 
     func testRenderHtmlIncludesHeaderAndFooter() {
-        let rendered = controller["new"](request: request)
-        XCTAssertEqual(rendered.body, "header\n\nnew\nfooter\n\n")
+        let rendered = try! controller["new"](to: request)
+        XCTAssertEqual(rendered.bodyString, "header\n\nnew\nfooter\n\n")
     }
 
     func testPostRequestToCreateRecord() {
-        controller["create"](request: postRequest)
+        try! controller["create"](to: postRequest)
         let record = TestModel.find(2)!
         XCTAssertEqual(String(record["name"]!), "James")
         XCTAssertEqual(String(record["surname"]!), "Bond")
@@ -92,8 +100,8 @@ class ControllerTests: XCTestCase {
 
     func testRedirect() {
         postRequest.params["id"] = "1"
-        let redirect = controller["update"](request: postRequest)
-        XCTAssertEqual(redirect["Location"], "/testModels/1")
+        let redirect = try! controller["update"](to: postRequest)
+        XCTAssertEqual(redirect.headers["Location"], "/testModels/1")
     }
 
 }
